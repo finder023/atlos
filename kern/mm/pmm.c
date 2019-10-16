@@ -326,3 +326,12 @@ void kfree_pages(page_t *page, size_t n) {
     size_t bd_off = (page - kpages) - bd_page_off;
     free_page_buddy(kern_bd, bd_off, n);
 }
+
+
+void *kmalloc(size_t n) {
+    return (void*)slab_alloc(n);
+}
+
+void kfree(void *p) {
+    slab_free((uintptr_t)p);
+}

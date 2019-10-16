@@ -240,7 +240,7 @@ retry:
         slab = tag2slab(slot->empty.head.next);
 
     else {
-        if (!fill_empty_slot(index))
+        if (fill_empty_slot(index) == 0)
             goto retry;
         else
             goto failed;

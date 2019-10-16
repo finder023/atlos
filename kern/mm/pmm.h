@@ -122,6 +122,10 @@ page_t *kalloc_pages(size_t n);
 
 void kfree_pages(page_t *page, size_t n);
 
+void *kmalloc(size_t n);
+
+void kfree(void *p);
+
 extern char bootstack[], bootstacktop[];
 
 
