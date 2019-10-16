@@ -10,6 +10,7 @@
 #include <pmm.h>
 #include <kmonitor.h>
 #include <vmm.h>
+#include <process.h>
 
 
 void kern_init(void) __attribute__((noreturn));
@@ -29,6 +30,7 @@ kern_init(void){
 
     pmm_init();                 // init physical memory management
     vmm_init();
+    process_init();
 
     pic_init();                 // init interrupt controller
     idt_init();                 // init interrupt descriptor table

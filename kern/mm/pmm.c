@@ -195,6 +195,16 @@ static void init_reserved_pages(uintptr_t reserved_end) {
     assert((uintptr_t)page < KADDRP2V(reserved_end));
 }
 
+static void set_page_zero(uintptr_t pst, uintptr_t ped) {
+    page_t *page = kpaddr2page(pst);
+    page_t *page_ed = kpaddr2page(ped);
+
+    while (page != page_ed) {
+        memset(page, 0, sizeof(page_t));
+        ++page;
+    }
+}
+
 static void map_kern_addr_liner(uintptr_t ed) {
     cprintf("__boot_pgdir: %x\n", __boot_pgdir);
     cprintf("boot_pgdir: %x\n", boot_pgdir);
@@ -284,6 +294,8 @@ static void setup_mm_page(void) {
 
     init_reserved_pages(kern_st);
 
+    set_page_zero(kern_st, user_st);
+
 }
 
 
@@ -329,6 +341,8 @@ void kfree_pages(page_t *page, size_t n) {
 
 
 void *kmalloc(size_t n) {
+    if (n > PGSIZE * 2)
+        panic("kamlloc arg larger than max_size: %d\n.", n);
     return (void*)slab_alloc(n);
 }
 
