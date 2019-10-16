@@ -12,6 +12,9 @@
 /* Represents true-or-false values */
 typedef int bool;
 
+#define false   0
+#define true    1
+
 /* Explicitly-sized versions of integer types */
 typedef char int8_t;
 typedef unsigned char uint8_t;
@@ -35,6 +38,7 @@ typedef uintptr_t size_t;
 
 /* used for page numbers */
 typedef size_t ppn_t;
+
 
 // /* *
 //  * Rounding operations (efficient when n is a power of 2)

@@ -1,7 +1,7 @@
 #ifndef __L_SLAB_H
 #define __L_SLAB_H
 
-#include <lib/list.h>
+#include <list.h>
 #include <types.h>
 
 

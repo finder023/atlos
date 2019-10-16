@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <buddy.h>
 #include <error.h>
+#include <slab.h>
+#include <string.h>
 
 /* *
  * Task State Segment:
@@ -142,7 +144,15 @@ inline uintptr_t page2kpaddr(page_t *page) {
 }
 
 inline uintptr_t page2kvaddr(page_t *page) {
-    return page2kpaddr + KERNBASE;
+    return page2kpaddr(page) + KERNBASE;
+}
+
+inline page_t *kpaddr2page(uintptr_t paddr) {
+    return (paddr >> PAGE_SHIFT) + kpages;
+}
+
+inline page_t *kvaddr2page(uintptr_t vaddr) {
+    return (KADDRV2P(vaddr) >> PAGE_SHIFT) + kpages;
 }
 
 
@@ -158,7 +168,7 @@ static int pgdir_add(uintptr_t vaddr, uintptr_t paddr, uint32_t perm) {
         }
 
         uintptr_t ppdep = page2kpaddr(page);
-        memset(KADDRP2V(ppdep), 0, PAGE_SIZE);
+        memset((void*)KADDRP2V(ppdep), 0, PAGE_SIZE);
         *pdep = ppdep | perm | PTE_P;
     }
 
@@ -264,7 +274,7 @@ static void setup_mm_page(void) {
 
     // set up buddy system
     kpages = (page_t*)setup_kbuddy((buddy_t*)(KADDRP2V(mem_st)), kern_pages);
-    kpages = ADDRALIGN(kpages, sizeof(page_t));
+    kpages = (page_t*)ADDRALIGN((uintptr_t)kpages, sizeof(page_t));
     assert((uintptr_t)kpages < KADDRP2V(0x400000));
 
     bd_page_off = kern_st  >> PAGE_SHIFT;
@@ -277,8 +287,6 @@ static void setup_mm_page(void) {
 }
 
 
-
-
 /* pmm_init - initialize the physical memory management */
 void
 pmm_init(void) {
@@ -287,6 +295,9 @@ pmm_init(void) {
     map_kern_addr_liner(0);
     gdt_init();
     setup_mm_page();
+
+    slab_init();
+
     cprintf("pmm init done.\n");
 }
 
@@ -296,16 +307,21 @@ page_t *kalloc_pages(size_t n) {
         return NULL;
     
     int bd_off;
-    if ((bd_off = alloc_page_buddy(kern_bd, n) < 0))
+    if ((bd_off = alloc_page_buddy(kern_bd, n)) < 0)
         return NULL;
     
-    return kpages + bd_off + bd_page_off;
+    page_t *page = kpages + bd_off + bd_page_off;
+    page->bd_size = n;
+    return page;
 }
 
 void kfree_pages(page_t *page, size_t n) {
     assert(page);
     if (n == 0)
         return;
+
+    if (page->bd_size != n)
+        warn("kfree pages bd_size not match at: %x", page2kvaddr(page));
 
     size_t bd_off = (page - kpages) - bd_page_off;
     free_page_buddy(kern_bd, bd_off, n);

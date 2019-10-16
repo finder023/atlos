@@ -30,7 +30,7 @@ inline uint32_t* pte_ptr(uintptr_t addr) {
                                                             PTE_INDEX(addr); 
 }
 
-#define PTE_PTR(addr)   ((uint32_t*)0xffc00000 +\ 
+#define PTE_PTR(addr)   ((uint32_t*)0xffc00000 +\
                      (((uint32_t)addr & 0xffc00000) >> 12) + PTE_INDEX(addr))
 
 
@@ -111,6 +111,10 @@ typedef struct page {
 uintptr_t page2kpaddr(page_t *page);
 
 uintptr_t page2kvaddr(page_t *page);
+
+page_t *kvaddr2page(uintptr_t vaddr);
+
+page_t *kpaddr2page(uintptr_t paddr);
 
 void pmm_init(void);
 
