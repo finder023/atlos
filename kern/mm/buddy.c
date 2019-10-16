@@ -214,8 +214,9 @@ void free_page_buddy(buddy_t *bd, uint32_t page_index, uint32_t pages) {
 static void buddy_check(buddy_t *bd) {
     assert(bd);
 
-    int times = 5;
     int res_index[10] = {0};
+    
+    int times = 5;
     for (int i=0; i<times; ++i) {
         res_index[i*2] = alloc_page_buddy(bd, 1);
         res_index[i*2+1] = alloc_page_buddy(bd, 1);
@@ -226,5 +227,55 @@ static void buddy_check(buddy_t *bd) {
         assert(res_index[i*2+1] == i*2+1);
     }
 
+    for (int i=0; i<times; ++i) {
+        free_page_buddy(bd, res_index[i*2], 1);
+        free_page_buddy(bd, res_index[i*2+1], 1);
+    }
+
+    for (int i=0; i<times*2; ++i) {
+        res_index[i] = alloc_page_buddy(bd, 1 << i);
+    }
+
+    for (int i=1; i<times*2; ++i) {
+        assert(res_index[i] == 1 << i);
+    }
+
+    for (int i=0; i<times*2; ++i) {
+        free_page_buddy(bd, res_index[i], 1 << i);
+    }
+
+    times = 3;
+
+    for (int i=0; i<times; ++i) {
+        res_index[3*i] = alloc_page_buddy(bd, 1);
+        res_index[3*i+1] = alloc_page_buddy(bd, 2);
+        res_index[3*i+2] = alloc_page_buddy(bd, 1);
+    }
+
+    for (int i=0; i<times; ++i) {
+        assert(res_index[3*i] == 4*i);
+        assert(res_index[3*i+1] == 4*i+2);
+        assert(res_index[3*i+2] == 4*i+1);
+    }
+
+    for (int i=0; i<times; ++i) {
+        free_page_buddy(bd, res_index[3*i], 1);
+        free_page_buddy(bd, res_index[3*i+1], 2);
+        free_page_buddy(bd, res_index[3*i+2], 1);
+    }
     
+    for (int i=0; i<times; ++i) {
+        res_index[i*2] = alloc_page_buddy(bd, 1);
+        res_index[i*2+1] = alloc_page_buddy(bd, 1);
+    }
+
+    for (int i=0; i<times; ++i) {
+        assert(res_index[i*2] == i*2);
+        assert(res_index[i*2+1] == i*2+1);
+    }
+
+    for (int i=0; i<times; ++i) {
+        free_page_buddy(bd, res_index[i*2], 1);
+        free_page_buddy(bd, res_index[i*2+1], 1);
+    }
 }

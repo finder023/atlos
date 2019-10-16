@@ -5,6 +5,7 @@
 #include <kbdreg.h>
 #include <picirq.h>
 #include <trap.h>
+#include <memlayout.h>
 
 /* stupid I/O delay routine necessitated by historical PC design flaws */
 static void
@@ -56,11 +57,11 @@ static uint16_t addr_6845;
 
 static void
 cga_init(void) {
-    volatile uint16_t *cp = (uint16_t *)CGA_BUF;
+    volatile uint16_t *cp = (uint16_t *)(CGA_BUF + KERNBASE);
     uint16_t was = *cp;
     *cp = (uint16_t) 0xA55A;
     if (*cp != 0xA55A) {
-        cp = (uint16_t*)MONO_BUF;
+        cp = (uint16_t*)(MONO_BUF + KERNBASE);
         addr_6845 = MONO_BASE;
     } else {
         *cp = was;

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <buddy.h>
+#include <error.h>
 
 /* *
  * Task State Segment:
@@ -28,6 +29,13 @@
  * into SS and ESP respectively.
  * */
 static struct taskstate ts = {0};
+
+// virtual address of boot-time page directory
+extern uintptr_t __boot_pgdir;
+uintptr_t *boot_pgdir = &__boot_pgdir;
+// physical address of boot-time page directory
+uintptr_t boot_cr3;
+
 
 /* *
  * Global Descriptor Table:
@@ -71,21 +79,26 @@ lgdt(struct pseudodesc *pd) {
     asm volatile ("ljmp %0, $1f\n 1:\n" :: "i" (KERNEL_CS));
 }
 
-/* temporary kernel stack */
-uint8_t stack0[1024];
+/* *
+ * load_esp0 - change the ESP0 in default task state segment,
+ * so that we can use different kernel stack when we trap frame
+ * user to kernel.
+ * */
+void
+load_esp0(uintptr_t esp0) {
+    ts.ts_esp0 = esp0;
+}
+
 
 /* gdt_init - initialize the default GDT and TSS */
 static void
 gdt_init(void) {
-    // Setup a TSS so that we can get the right stack when we trap from
-    // user to the kernel. But not safe here, it's only a temporary value,
-    // it will be set to KSTACKTOP in lab2.
-    ts.ts_esp0 = (uint32_t)&stack0 + sizeof(stack0);
+    // set boot kernel stack and default SS0
+    load_esp0((uintptr_t)bootstacktop);
     ts.ts_ss0 = KERNEL_DS;
 
     // initialize the TSS filed of the gdt
-    gdt[SEG_TSS] = SEG16(STS_T32A, (uint32_t)&ts, sizeof(ts), DPL_KERNEL);
-    gdt[SEG_TSS].sd_s = 0;
+    gdt[SEG_TSS] = SEGTSS(STS_T32A, (uintptr_t)&ts, sizeof(ts), DPL_KERNEL);
 
     // reload all segment registers
     lgdt(&gdt_pd);
@@ -93,6 +106,7 @@ gdt_init(void) {
     // load the TSS
     ltr(GD_TSS);
 }
+
 
 // get memory layout, return max_memory area
 static uintptr_t get_mem_layout(void) {
@@ -121,14 +135,98 @@ static page_t *kpages;
 
 static buddy_t *kern_bd;
 
-// 
+static size_t bd_page_off = 0;
+
+inline uintptr_t page2kpaddr(page_t *page) {
+    return (page - kpages) << PAGE_SHIFT;
+}
+
+inline uintptr_t page2kvaddr(page_t *page) {
+    return page2kpaddr + KERNBASE;
+}
+
+
+static int pgdir_add(uintptr_t vaddr, uintptr_t paddr, uint32_t perm) {
+    uint32_t *pdep, *ptep;
+    pdep = PDE_PTR(vaddr);
+    page_t *page;
+    
+    if (!PAGE_P(*pdep)) {
+        if ((page = kalloc_pages(1)) == NULL) {
+            warn("alloc pde failed at: %x.\n", vaddr);
+            return E_NO_MEM;
+        }
+
+        uintptr_t ppdep = page2kpaddr(page);
+        memset(KADDRP2V(ppdep), 0, PAGE_SIZE);
+        *pdep = ppdep | perm | PTE_P;
+    }
+
+    assert(*pdep & PTE_P);
+
+    ptep = PTE_PTR(vaddr);
+    if (!(*ptep & PTE_P)) {
+        *ptep = paddr | perm | PTE_P; 
+    } else {
+        warn("pte exist at: %x.\n", vaddr);
+        return E_INVAL;
+    }
+    return 0;
+}
+
+static void init_reserved_pages(uintptr_t reserved_end) {
+    page_t *page = kpages;
+    for (uintptr_t st = 0; st < reserved_end; st += PAGE_SIZE) {
+        page_set_reserved(page);
+        ++page;
+    }
+
+    cprintf("reserved end page_addr: %x.\n", page);
+    assert((uintptr_t)page < KADDRP2V(reserved_end));
+}
+
+static void map_kern_addr_liner(uintptr_t ed) {
+    cprintf("__boot_pgdir: %x\n", __boot_pgdir);
+    cprintf("boot_pgdir: %x\n", boot_pgdir);
+
+    // do self map
+    uintptr_t pboot_pgdir = KADDRV2P((uintptr_t)boot_pgdir);
+    boot_pgdir[1023] = pboot_pgdir | PTE_P | PTE_W;
+
+    
+
+    for (uintptr_t addr = 0x400000; addr < ed; addr += PGSIZE) {
+        if (pgdir_add(addr + KERNBASE, addr, PTE_W) != 0) {
+            panic("map kern addr liner failed in: %x", addr);
+        }
+    }
+}
+
+
+// return end addr of bd_buff
+static uintptr_t setup_kbuddy(buddy_t *bd, size_t n) {
+    assert(bd && n);
+
+    uintptr_t bd_buff = (uintptr_t)bd + sizeof(buddy_t);
+    kern_bd = bd;
+    buddy_init(bd, n, bd_buff);
+
+    cprintf("buddy_buff: %x\n", bd_buff);
+    bd_buff += n * 8;
+    cprintf("buddy_buff_ed: %x\n", bd_buff);
+    
+    return bd_buff;
+}
+
+
+
 static void setup_mm_page(void) {
     uintptr_t mem_end = get_mem_layout();
     mem_end = ROUNDDOWN(mem_end, PAGE_SIZE);
     size_t kern_size, user_size;
 
     extern char end[];
-    uintptr_t mem_st = ROUNDUP((uintptr_t)end, PAGE_SIZE);
+    uintptr_t mem_st = ROUNDUP((uintptr_t)KADDRV2P(end), PAGE_SIZE);
 
     size_t all_mem = mem_end - mem_st;
     kern_size = all_mem / 2 + mem_st;
@@ -158,48 +256,57 @@ static void setup_mm_page(void) {
 
     size_t user_pages = user_size >> PAGE_SHIFT;
 
-    cprintf("kern phy st: %x\n", kern_st);
-    cprintf("user phy st: %x\n", user_st);
+    cprintf("kern phy st: %x\n", (kern_st));
+    cprintf("user phy st: %x\n", (user_st));
     cprintf("kern phy pages: %d\n", kern_pages);
     cprintf("user phy pages: %d\n", user_pages);
     cprintf("mem st: %x\n", mem_st);
 
-    kpages = (page_t*)mem_st;
-    page_t *page = kpages;
+    // set up buddy system
+    kpages = (page_t*)setup_kbuddy((buddy_t*)(KADDRP2V(mem_st)), kern_pages);
+    kpages = ADDRALIGN(kpages, sizeof(page_t));
+    assert((uintptr_t)kpages < KADDRP2V(0x400000));
 
-    for (uintptr_t st = 0; st < user_st; st += PAGE_SIZE) {
-        page_set_reserved(page);
-        ++page;
-    }
-
-    assert((uintptr_t)page < kern_st);
-
-    uintptr_t kbuddy_addr = (uintptr_t)page;
-    uintptr_t kbuddy_buff = kbuddy_addr + sizeof(buddy_t);
-    uintptr_t kbuddy_buff_ed = kbuddy_buff + kern_pages * 8;
-
-    assert(kbuddy_buff_ed < kern_st);
-
-    cprintf("buddy_buff: %x\n", kbuddy_buff);
-    cprintf("buddy_buff_ed: %x\n", kbuddy_buff_ed);
-
-    // set kern buddy addr
-    kern_bd = (buddy_t*)kbuddy_addr;
-    buddy_init(kern_bd, kern_pages, kbuddy_buff);
-
+    bd_page_off = kern_st  >> PAGE_SHIFT;
     
+    
+    map_kern_addr_liner(user_st);
+
+    init_reserved_pages(kern_st);
+
 }
 
 
-static void map_kern_addr_liner(uintptr_t phy_ed) {
 
-}
 
 /* pmm_init - initialize the physical memory management */
 void
 pmm_init(void) {
+
+    boot_cr3 = KADDRV2P(boot_pgdir);
+    map_kern_addr_liner(0);
     gdt_init();
     setup_mm_page();
     cprintf("pmm init done.\n");
 }
 
+
+page_t *kalloc_pages(size_t n) {
+    if (n == 0)
+        return NULL;
+    
+    int bd_off;
+    if ((bd_off = alloc_page_buddy(kern_bd, n) < 0))
+        return NULL;
+    
+    return kpages + bd_off + bd_page_off;
+}
+
+void kfree_pages(page_t *page, size_t n) {
+    assert(page);
+    if (n == 0)
+        return;
+
+    size_t bd_off = (page - kpages) - bd_page_off;
+    free_page_buddy(kern_bd, bd_off, n);
+}

@@ -2,6 +2,7 @@
 #define __KERN_MM_PMM_H__
 
 #include <types.h>
+#include <memlayout.h>
 
 #define	 PG_P_1	  1	// 页表项或页目录项存在属性位
 #define	 PG_P_0	  0	// 页表项或页目录项存在属性位
@@ -13,19 +14,25 @@
 
 #define is_pow_of_2(x)  (((x) & ((x) - 1)) == 0)
 
-#define PAGE_P(addr) ((uintptr_t)addr & (uintptr_t)0x1)
+#define PAGE_P(addr) ((addr) & (uintptr_t)0x1)
 
-#define PDE_INDEX(addr) ((uintptr_t)addr >> 22)
-#define PTE_INDEX(addr) (((uintptr_t)addr & 0x003ff000) >> 12)
+#define PDE_INDEX(addr) ((addr) >> 22)
+#define PTE_INDEX(addr) (((addr) & 0x003ff000) >> 12)
 
-inline uint32_t* pde_ptr(uint32_t *addr) {
+inline uint32_t* pde_ptr(uintptr_t addr) {
     return (uint32_t*)0xfffff000 + PDE_INDEX(addr);
 }
 
-inline uint32_t* pte_ptr(uint32_t *addr) {
+#define PDE_PTR(addr)   ((uint32_t*)0xfffff000 + PDE_INDEX(addr))
+
+inline uint32_t* pte_ptr(uintptr_t addr) {
     return (uint32_t*)0xffc00000 + (((uint32_t)addr & 0xffc00000) >> 12) + 
                                                             PTE_INDEX(addr); 
 }
+
+#define PTE_PTR(addr)   ((uint32_t*)0xffc00000 +\ 
+                     (((uint32_t)addr & 0xffc00000) >> 12) + PTE_INDEX(addr))
+
 
 inline static uint32_t
 next_pow_of_2(uint32_t x){
@@ -51,6 +58,15 @@ typedef struct page {
 #define POWOF2(x)   (((x) & (x-1)) == 0)
 
 #define ROUNDDOWN(x, n) ((x) & (~(n-1)))
+
+#define ADDRALIGN(addr, n)  ({          \
+    uint32_t _t = next_pow_of_2(n) - 1; \
+    ((uintptr_t)addr + _t) & (~_t);     \
+})
+
+#define KADDRV2P(kvaddr)    ((kvaddr) - KERNBASE)
+
+#define KADDRP2V(kpaddr)    ((kpaddr) + KERNBASE)
 
 #define ROUNDUP(x, n) (((x) + (n-1)) & (~(n-1)))
 
@@ -91,7 +107,19 @@ typedef struct page {
 
 #define vira2offset(addr)   ((ROUNDDOWN(addr, PAGE_SIZE) - kernel_vir_base) \
                                                                 >> PAGE_SHIFT)
+
+uintptr_t page2kpaddr(page_t *page);
+
+uintptr_t page2kvaddr(page_t *page);
+
 void pmm_init(void);
+
+page_t *kalloc_pages(size_t n);
+
+void kfree_pages(page_t *page, size_t n);
+
+extern char bootstack[], bootstacktop[];
+
 
 #endif /* !__KERN_MM_PMM_H__ */
 
