@@ -39,6 +39,7 @@ typedef struct {
     system_time_t       period;
     system_time_t       time_capacity;
     system_address_t    entry_point;
+    system_address_t    arg;
     stack_size_t        stack_size;
     priority_t          base_priority;
     deadline_t          deadline;

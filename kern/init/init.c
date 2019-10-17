@@ -43,6 +43,7 @@ kern_init(void){
     //lab1_switch_test();
 
     /* do nothing */
+    schedule();
     while (1);
 }
 

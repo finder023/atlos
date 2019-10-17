@@ -41,3 +41,8 @@ __trapret:
     addl $0x8, %esp
     iret
 
+.globl forkrets
+forkrets:
+
+    movl 4(%esp), %esp
+    jmp __trapret

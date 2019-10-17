@@ -85,9 +85,13 @@ typedef struct task {
 }
 
 
+#define le2task(le)  elem2entry(task_t, all_tag, le)
 
+void proc_run(task_t *task);
 
 void process_init(void);
+
+void schedule(void);
 
 
 #endif

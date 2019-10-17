@@ -64,9 +64,9 @@ typedef struct page {
     ((uintptr_t)addr + _t) & (~_t);     \
 })
 
-#define KADDRV2P(kvaddr)    ((kvaddr) - KERNBASE)
+#define KADDRV2P(kvaddr)    ((uintptr_t)(kvaddr) - KERNBASE)
 
-#define KADDRP2V(kpaddr)    ((kpaddr) + KERNBASE)
+#define KADDRP2V(kpaddr)    ((uintptr_t)(kpaddr) + KERNBASE)
 
 #define ROUNDUP(x, n) (((x) + (n-1)) & (~(n-1)))
 
@@ -116,6 +116,8 @@ page_t *kvaddr2page(uintptr_t vaddr);
 
 page_t *kpaddr2page(uintptr_t paddr);
 
+void load_esp0(uintptr_t esp0);
+
 void pmm_init(void);
 
 page_t *kalloc_pages(size_t n);
@@ -128,6 +130,7 @@ void kfree(void *p);
 
 extern char bootstack[], bootstacktop[];
 
+extern uintptr_t boot_cr3;
 
 #endif /* !__KERN_MM_PMM_H__ */
 
