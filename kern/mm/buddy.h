@@ -23,10 +23,8 @@ typedef struct buddy_elem {
 void dprintf_buff(buddy_t*);
 
 void buddy_init(buddy_t *, uint32_t size, uintptr_t buff_addr);
-buddy_elem_t *buddy_alloc(buddy_t *, uint32_t);
-void buddy_free(buddy_t *, buddy_elem_t*, uint32_t);
 
-int alloc_page_buddy(buddy_t *, uint32_t pages);
-void free_page_buddy(buddy_t *, uint32_t pindex, uint32_t pages);
+int buddy_alloc_index(buddy_t *, uint32_t pages);
+void buddy_free_index(buddy_t *, uint32_t pindex, uint32_t pages);
 
 #endif

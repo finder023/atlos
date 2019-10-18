@@ -144,7 +144,7 @@ static int find_buddy_slot(buddy_t *bd, int pages) {
     }
 }
 
-buddy_elem_t *buddy_alloc(buddy_t *bd, uint32_t pages) {
+static buddy_elem_t *buddy_alloc_elem(buddy_t *bd, uint32_t pages) {
     ASSERT(bd);
 
     if (pages == 0)
@@ -160,7 +160,7 @@ buddy_elem_t *buddy_alloc(buddy_t *bd, uint32_t pages) {
 }
 
 
-void buddy_free(buddy_t *bd, buddy_elem_t *ptr, uint32_t pages) {
+static void buddy_free_elem(buddy_t *bd, buddy_elem_t *ptr, uint32_t pages) {
     ASSERT(bd && ptr);
     // ASSERT(is_pow_of_2(pages));
 
@@ -180,10 +180,10 @@ void buddy_free(buddy_t *bd, buddy_elem_t *ptr, uint32_t pages) {
 
 
 // return page index
-int alloc_page_buddy(buddy_t *bd, uint32_t pages) {
+int buddy_alloc_index(buddy_t *bd, uint32_t pages) {
     ASSERT(bd);
 
-    buddy_elem_t *elem = buddy_alloc(bd, pages);
+    buddy_elem_t *elem = buddy_alloc_elem(bd, pages);
     if (!elem)
         return -1;
 
@@ -197,7 +197,7 @@ int alloc_page_buddy(buddy_t *bd, uint32_t pages) {
 }
 
 // page_index
-void free_page_buddy(buddy_t *bd, uint32_t page_index, uint32_t pages) {
+void buddy_free_index(buddy_t *bd, uint32_t page_index, uint32_t pages) {
     ASSERT(bd);
 
     pages = next_pow_of_2(pages);
@@ -206,7 +206,7 @@ void free_page_buddy(buddy_t *bd, uint32_t page_index, uint32_t pages) {
     int off_index = page_index >> rlevel;
     int index = (1 << (bd->level - rlevel)) - 1 + off_index;
 
-    buddy_free(bd, buddy_elem(bd, index), pages);
+    buddy_free_elem(bd, buddy_elem(bd, index), pages);
 
 }
 
@@ -218,8 +218,8 @@ static void buddy_check(buddy_t *bd) {
     
     int times = 5;
     for (int i=0; i<times; ++i) {
-        res_index[i*2] = alloc_page_buddy(bd, 1);
-        res_index[i*2+1] = alloc_page_buddy(bd, 1);
+        res_index[i*2] = buddy_alloc_index(bd, 1);
+        res_index[i*2+1] = buddy_alloc_index(bd, 1);
     }
 
     for (int i=0; i<times; ++i) {
@@ -228,12 +228,12 @@ static void buddy_check(buddy_t *bd) {
     }
 
     for (int i=0; i<times; ++i) {
-        free_page_buddy(bd, res_index[i*2], 1);
-        free_page_buddy(bd, res_index[i*2+1], 1);
+        buddy_free_index(bd, res_index[i*2], 1);
+        buddy_free_index(bd, res_index[i*2+1], 1);
     }
 
     for (int i=0; i<times*2; ++i) {
-        res_index[i] = alloc_page_buddy(bd, 1 << i);
+        res_index[i] = buddy_alloc_index(bd, 1 << i);
     }
 
     for (int i=1; i<times*2; ++i) {
@@ -241,15 +241,15 @@ static void buddy_check(buddy_t *bd) {
     }
 
     for (int i=0; i<times*2; ++i) {
-        free_page_buddy(bd, res_index[i], 1 << i);
+        buddy_free_index(bd, res_index[i], 1 << i);
     }
 
     times = 3;
 
     for (int i=0; i<times; ++i) {
-        res_index[3*i] = alloc_page_buddy(bd, 1);
-        res_index[3*i+1] = alloc_page_buddy(bd, 2);
-        res_index[3*i+2] = alloc_page_buddy(bd, 1);
+        res_index[3*i] = buddy_alloc_index(bd, 1);
+        res_index[3*i+1] = buddy_alloc_index(bd, 2);
+        res_index[3*i+2] = buddy_alloc_index(bd, 1);
     }
 
     for (int i=0; i<times; ++i) {
@@ -259,14 +259,14 @@ static void buddy_check(buddy_t *bd) {
     }
 
     for (int i=0; i<times; ++i) {
-        free_page_buddy(bd, res_index[3*i], 1);
-        free_page_buddy(bd, res_index[3*i+1], 2);
-        free_page_buddy(bd, res_index[3*i+2], 1);
+        buddy_free_index(bd, res_index[3*i], 1);
+        buddy_free_index(bd, res_index[3*i+1], 2);
+        buddy_free_index(bd, res_index[3*i+2], 1);
     }
     
     for (int i=0; i<times; ++i) {
-        res_index[i*2] = alloc_page_buddy(bd, 1);
-        res_index[i*2+1] = alloc_page_buddy(bd, 1);
+        res_index[i*2] = buddy_alloc_index(bd, 1);
+        res_index[i*2+1] = buddy_alloc_index(bd, 1);
     }
 
     for (int i=0; i<times; ++i) {
@@ -275,7 +275,7 @@ static void buddy_check(buddy_t *bd) {
     }
 
     for (int i=0; i<times; ++i) {
-        free_page_buddy(bd, res_index[i*2], 1);
-        free_page_buddy(bd, res_index[i*2+1], 1);
+        buddy_free_index(bd, res_index[i*2], 1);
+        buddy_free_index(bd, res_index[i*2+1], 1);
     }
 }

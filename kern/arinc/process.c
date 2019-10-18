@@ -33,8 +33,9 @@ static void forkret(void) {
 }
 
 static void kthread_ret(void) {
+    task_t *task = current_thread;
     asm volatile("movl %0, %%esp; jmp __trapret" :: 
-                    "g" (current_thread->tf) : "memory");
+                    "g" (task->tf) : "memory");
 }
 
 static void pid_map_init(void) {
@@ -67,8 +68,8 @@ static task_t *alloc_proc(void) {
         return task;
     }
 
-    // empty context
-    memset(&task->ctxt, 0, sizeof(context_t));
+    // empty pages 
+    memset(task, 0, KSTACKSIZE);
 
     uintptr_t stack_ed = (uintptr_t)task + KSTACKSIZE;
     task->kstack = (uint8_t*)stack_ed;
@@ -154,8 +155,8 @@ static void make_init_thread(void) {
 }
 
 static void thread_func(void *arg) {
-    while (1)
     cprintf("this is a new thread: %d.\n", *(int*)arg);
+    while (1);
 }
 
 static void check_kernel_thread(void) {

@@ -135,9 +135,11 @@ static uintptr_t get_mem_layout(void) {
 
 static page_t *kpages;
 
-static buddy_t *kern_bd;
+static buddy_t *kern_bd, *user_bd;
 
 static size_t bd_page_off = 0;
+
+static size_t user_page_off = 0;
 
 inline uintptr_t page2kpaddr(page_t *page) {
     return (page - kpages) << PAGE_SHIFT;
@@ -238,7 +240,26 @@ static uintptr_t setup_kbuddy(buddy_t *bd, size_t n) {
     return bd_buff;
 }
 
+static int setup_ubuddy(size_t n) {
+    buddy_t *bd;
+    uintptr_t bd_buff;
+    page_t *page;
+    int nr_page = ROUNDUP(n, PAGE_SIZE) >> PAGE_SHIFT;
 
+    if ((bd = kmalloc(sizeof(buddy_t))) == NULL) {
+        return E_NO_MEM;
+    }
+
+    if ((page = kalloc_pages(nr_page)) == NULL) {
+        kfree(bd);
+        return E_NO_MEM;
+    }
+
+    bd_buff = page2kvaddr(page);
+    buddy_init(bd, n, bd_buff);
+    user_bd = bd;
+    return 0;
+}
 
 static void setup_mm_page(void) {
     uintptr_t mem_end = get_mem_layout();
@@ -246,10 +267,11 @@ static void setup_mm_page(void) {
     size_t kern_size, user_size;
 
     extern char end[];
-    uintptr_t mem_st = ROUNDUP((uintptr_t)KADDRV2P(end), PAGE_SIZE);
-
+    // uintptr_t mem_st = ROUNDUP((uintptr_t)KADDRV2P(end), PAGE_SIZE);
+    uintptr_t mem_st = 0x200000;
+    assert(KADDRV2P(end) < mem_st);
     size_t all_mem = mem_end - mem_st;
-    kern_size = all_mem / 2 + mem_st;
+    kern_size = all_mem / 2;
 
     if (kern_size > KMAXSIZE) {
         kern_size = KMAXSIZE;
@@ -270,6 +292,8 @@ static void setup_mm_page(void) {
     add_mem = ROUNDUP(add_mem, PAGE_SIZE);
 
     uintptr_t kern_st = mem_st + add_mem;
+    kern_st = ROUNDUP(kern_st, KSTACKSIZE);
+
     uintptr_t user_st = kern_st + kern_size;
     user_size = mem_end - user_st;
     user_size = next_pow_of_2(user_size) >> 1;
@@ -288,7 +312,7 @@ static void setup_mm_page(void) {
     assert((uintptr_t)kpages < KADDRP2V(0x400000));
 
     bd_page_off = kern_st  >> PAGE_SHIFT;
-    
+    user_page_off = user_st >> PAGE_SHIFT; 
     
     map_kern_addr_liner(user_st);
 
@@ -296,6 +320,11 @@ static void setup_mm_page(void) {
 
     set_page_zero(kern_st, user_st);
 
+    slab_init();
+   
+    if (setup_ubuddy(user_pages) != 0) {
+        panic("setup user buddy fail.\n");
+    }
 }
 
 
@@ -308,35 +337,56 @@ pmm_init(void) {
     gdt_init();
     setup_mm_page();
 
-    slab_init();
 
     cprintf("pmm init done.\n");
 }
 
-
-page_t *kalloc_pages(size_t n) {
+static page_t *alloc_pages(size_t n, int uork) {
     if (n == 0)
         return NULL;
     
     int bd_off;
-    if ((bd_off = alloc_page_buddy(kern_bd, n)) < 0)
+    size_t page_off = uork ? user_page_off : bd_page_off;
+    buddy_t *bd = uork ? user_bd : kern_bd;
+
+    if ((bd_off = buddy_alloc_index(bd, n)) < 0)
         return NULL;
     
-    page_t *page = kpages + bd_off + bd_page_off;
+    page_t *page = kpages + page_off + bd_off;
     page->bd_size = n;
     return page;
 }
 
-void kfree_pages(page_t *page, size_t n) {
+static void free_pages(page_t *page, size_t n, int uork) {
     assert(page);
     if (n == 0)
         return;
-
+    
     if (page->bd_size != n)
         warn("kfree pages bd_size not match at: %x", page2kvaddr(page));
 
-    size_t bd_off = (page - kpages) - bd_page_off;
-    free_page_buddy(kern_bd, bd_off, n);
+    int bd_off;
+    size_t page_off = uork ? user_page_off : bd_page_off;
+    buddy_t *bd = uork ? user_bd : kern_bd;
+
+    bd_off = (page - kpages) - page_off;
+    buddy_free_index(bd, bd_off, n);
+}
+
+page_t *kalloc_pages(size_t n) {
+    return alloc_pages(n, 0);
+}
+
+page_t *ualloc_pages(size_t n) {
+    return alloc_pages(n, 1);
+}
+
+void kfree_pages(page_t *page, size_t n) {
+    free_pages(page, n, 0);
+}
+
+void ufree_pages(page_t *page, size_t n) {
+    free_pages(page, n, 1);
 }
 
 

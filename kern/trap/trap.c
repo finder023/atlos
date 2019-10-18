@@ -148,12 +148,35 @@ print_regs(struct pushregs *regs) {
 /* temporary trapframe or pointer to trapframe */
 struct trapframe switchk2u, *switchu2k;
 
+static inline void
+print_pgfault(struct trapframe *tf) {
+    /* error_code:
+     * bit 0 == 0 means no page found, 1 means protection fault
+     * bit 1 == 0 means read, 1 means write
+     * bit 2 == 0 means kernel, 1 means user
+     * */
+    cprintf("page fault at 0x%08x: %c/%c [%s].\n", rcr2(),
+            (tf->tf_err & 4) ? 'U' : 'K',
+            (tf->tf_err & 2) ? 'W' : 'R',
+            (tf->tf_err & 1) ? "protection fault" : "no page found");
+}
+
+
+static int pgfault_handler(trapframe_t *tf) {
+    print_pgfault(tf);
+    print_trapframe(tf);
+    panic("page fault.\n");
+}
+
 /* trap_dispatch - dispatch based on what type of trap occurred */
 static void
 trap_dispatch(struct trapframe *tf) {
     char c;
 
     switch (tf->tf_trapno) {
+    case T_PGFLT:
+        pgfault_handler(tf);
+        break;
     case IRQ_OFFSET + IRQ_TIMER:
         /* LAB1 YOUR CODE : STEP 3 */
         /* handle the timer interrupt */
